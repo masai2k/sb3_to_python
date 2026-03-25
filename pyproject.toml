@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sb3-to-python"
+version = "0.1.0"
+description = "Convert Scratch/PenguinMod .sb3 files into readable Python drafts"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "OpenAI" }
+]
+
+[tool.setuptools]
+packages = ["sb3_to_python"]
