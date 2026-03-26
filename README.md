@@ -1,91 +1,45 @@
-# sb3_to_python
+# SB3 → Python Converter
 
-Converter da file `.sb3` Scratch/PenguinMod a un file Python leggibile, eseguibile da terminale.
+Convert `.sb3` files (Scratch / PenguinMod projects) into readable Python code.
 
-## Obiettivo
+---
 
-Questo tool non promette una conversione 1:1 perfetta per ogni progetto complesso, ma è progettato per essere **compatibile con qualunque file `.sb3` senza andare in crash**:
+## 🚀 Quick Start (No Installation)
 
-- i blocchi supportati vengono convertiti in Python;
-- i blocchi non ancora supportati vengono lasciati come commenti `# TODO ...`;
-- per default converte **tutto il progetto** (stage + sprite);
-- in alternativa puoi convertire un singolo target.
+Run the converter directly from GitHub without downloading anything:
 
-## Uso rapido
+    curl -fsSL https://raw.githubusercontent.com/masai2k/sb3_to_python/main/convertitore.py | python3 - yourfile.sb3
 
-Dentro la cartella del repo:
+**Example**
 
-```bash
-python convertitore.py iltuofile.sb3
-```
+    curl -fsSL https://raw.githubusercontent.com/masai2k/sb3_to_python/main/convertitore.py | python3 - samuelchesparalemeleremix.sb3
 
-Esempio nello stile che volevi:
+This will generate:
 
-```bash
-cd sb3python
-python convertitore.py word.sb3
-```
+    samuelchesparalemeleremix.py
 
-Questo genera automaticamente:
+---
 
-```bash
-word.py
-```
+## 📦 Output
 
-## Altri esempi
+The generated Python file is created in the same folder as the input `.sb3` file.
 
-Convertire tutto il progetto con nome output personalizzato:
+    project.sb3 → project.py
 
-```bash
-python convertitore.py progetto.sb3 -o progetto_convertito.py
-```
+---
 
-Convertire solo un target specifico:
+## ⚙️ Alternative Usage (Local)
 
-```bash
-python convertitore.py progetto.sb3 --single-target --target-index 0
-```
+If you prefer to run it locally:
 
-Puoi anche usare il package:
+    git clone https://github.com/masai2k/sb3_to_python.git
+    cd sb3_to_python
+    python3 convertitore.py yourfile.sb3
 
-```bash
-python -m sb3_to_python progetto.sb3
-```
+### Custom output file
 
-## Compatibilità attuale
+    python3 convertitore.py input.sb3 -o output.py
 
-Supporto già incluso per molti blocchi comuni:
+### Convert only one script/target
 
-- eventi `when green flag clicked`
-- `if`, `if else`, `repeat`, `repeat until`, `forever`, `wait`, `wait until`, `stop`
-- variabili
-- liste principali
-- `ask and wait`, `answer`
-- operatori aritmetici, logici e varie operazioni stringa
-- parte dei blocchi motion
-- alcuni blocchi PenguinMod `localstorage`
-- fallback sicuro sui blocchi sconosciuti tramite commenti `TODO`
-
-## Struttura
-
-- `convertitore.py` → script terminale principale
-- `sb3_to_python/` → package Python
-- `tests/` → test base
-
-## Setup opzionale con venv
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-## Nota importante
-
-Il Python generato è un **draft leggibile** del progetto. Per progetti Scratch/PenguinMod avanzati:
-
-- il parallelismo è approssimato con thread;
-- alcune estensioni o blocchi grafici/audio restano come `TODO`;
-- i comportamenti del runtime Scratch non sono sempre replicati al 100%.
-
-Però il file generato è pensato per essere una base chiara da rifinire a mano.
+    python3 convertitore.py input.sb3 --single-target --target-index 0
