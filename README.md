@@ -4,7 +4,7 @@ Convert `.sb3` files (Scratch / PenguinMod projects) into readable Python code.
 
 ---
 
-## 🚀 Quick Start (No Installation)
+### 🚀 Quick Start (No Installation)
 
 Run the converter directly from GitHub without downloading anything:
 
