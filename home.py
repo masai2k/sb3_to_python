@@ -6,6 +6,7 @@ import tempfile
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from urllib.request import urlopen
+import ssl
 
 BASE_RAW = "https://raw.githubusercontent.com/masai2k/sb3_to_python/main"
 
@@ -16,9 +17,14 @@ BTN_DEBUG = "#059669"
 TEXT = "#f8fafc"
 MUTED = "#cbd5e1"
 
-
 def download_text(url: str) -> str:
-    with urlopen(url) as resp:
+    try:
+        import certifi
+        ctx = ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        ctx = ssl.create_default_context()
+
+    with urlopen(url, context=ctx) as resp:
         return resp.read().decode("utf-8")
 
 
