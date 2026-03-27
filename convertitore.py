@@ -274,9 +274,22 @@ def sanitize_name(name):
 
 def indent(text, level=1):
     pad = "    " * level
-    lines = text.splitlines() or ["pass"]
-    return "\n".join((pad + line) if line.strip() else line for line in lines)
 
+    if text is None:
+        return pad + "pass"
+
+    lines = text.splitlines()
+
+    meaningful = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            meaningful.append(line)
+
+    if not meaningful:
+        return pad + "pass"
+
+    return "\n".join((pad + line) if line.strip() else line for line in lines)
 class SB3ToPythonConverter:
     def __init__(self, project_data, single_target=False, target_index=0):
         self.project_data = project_data
@@ -464,20 +477,37 @@ class SB3ToPythonConverter:
         return f"# TODO block: {op}"
 
     def convert_stack(self, start_id, blocks, variables_by_id, lists_by_id):
-        out = []
-        current = start_id
-        visited = set()
-        while current and current in blocks:
-            if current in visited:
-                out.append("# TODO block cycle detected")
-                break
-            visited.add(current)
-            code = self.convert_block(blocks[current], blocks, variables_by_id, lists_by_id)
-            if code:
-                out.append(code)
-            current = blocks[current].get("next")
-        return "\n".join(out) if out else "pass"
+    out = []
+    current = start_id
+    visited = set()
 
+    while current and current in blocks:
+        if current in visited:
+            out.append("# TODO block cycle detected")
+            break
+        visited.add(current)
+
+        current_block = blocks[current]
+        if not isinstance(current_block, dict):
+            out.append("# TODO invalid block structure")
+            break
+
+        code = self.convert_block(current_block, blocks, variables_by_id, lists_by_id)
+        if code is not None:
+            out.append(code)
+
+        current = current_block.get("next")
+
+    meaningful = []
+    for line in out:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            meaningful.append(line)
+
+    if not meaningful:
+        return "pass"
+
+    return "\n".join(out)
     def convert_target(self, target, target_index):
         blocks = target.get("blocks", {})
         variables_by_id = self.collect_variables(target)

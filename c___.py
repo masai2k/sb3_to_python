@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
+# Corrected standalone convertitore.py
 import argparse
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -11,8 +11,7 @@ import time
 import zipfile
 from pathlib import Path
 
-
-CPP_DEBUGGER_SOURCE = r"""
+CPP_DEBUGGER_SOURCE = r'''
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -73,7 +72,6 @@ static std::optional<CompileError> compilePythonFile(const fs::path& filePath) {
 
     CompileError err;
     err.raw = output;
-
     std::smatch m;
     std::regex lineRe(R"(line\s+(\d+))");
     if (std::regex_search(output, m, lineRe)) err.line = std::stoi(m[1]);
@@ -110,10 +108,8 @@ static bool stripInlineTodoInsideCall(std::string& line) {
     auto pos = line.find("# TODO");
     if (pos == std::string::npos) pos = line.find("# unsupported");
     if (pos == std::string::npos) return false;
-
     int depth = countUnclosedBeforeComment(line);
     if (depth <= 0) return false;
-
     std::string before = trim(line.substr(0, pos));
     line = before + std::string(depth, ')');
     return true;
@@ -158,7 +154,7 @@ static bool quoteBareSingleArgument(std::string& line) {
     if (std::regex_match(line, m, re)) {
         std::string arg = trim(m[2]);
         if (arg != "True" && arg != "False" && arg != "None") {
-            line = m[1].str() + "\"" + arg + "\"" + m[3].str();
+            line = m[1].str() + """ + arg + """ + m[3].str();
             return true;
         }
     }
@@ -167,7 +163,6 @@ static bool quoteBareSingleArgument(std::string& line) {
 
 static bool applyHeuristicFix(std::vector<std::string>& lines, const CompileError& err) {
     bool changed = false;
-
     auto applyTo = [&](int idx) {
         if (idx < 0 || idx >= static_cast<int>(lines.size())) return;
         changed |= stripInlineTodoInsideCall(lines[idx]);
@@ -175,17 +170,14 @@ static bool applyHeuristicFix(std::vector<std::string>& lines, const CompileErro
         changed |= quoteBareSingleArgument(lines[idx]);
         changed |= fixUnclosedParens(lines[idx]);
     };
-
     if (err.line > 0) {
         for (int off = -2; off <= 2; ++off) applyTo(err.line - 1 + off);
     }
-
     for (auto& line : lines) {
         if (line.find("# TODO expr") != std::string::npos || line.find("# unsupported") != std::string::npos) {
             changed |= stripInlineTodoInsideCall(line);
         }
     }
-
     return changed;
 }
 
@@ -216,30 +208,21 @@ int main(int argc, char** argv) {
         std::cerr << "Usage: sb3_debugger yourfile.py [max_passes]\n";
         return 1;
     }
-
     fs::path pyPath = argv[1];
     int maxPasses = 10;
     if (argc >= 3) {
-        try {
-            maxPasses = std::max(1, std::stoi(argv[2]));
-        } catch (...) {
-            std::cerr << "Invalid max_passes value.\n";
-            return 1;
-        }
+        try { maxPasses = std::max(1, std::stoi(argv[2])); }
+        catch (...) { std::cerr << "Invalid max_passes value.\n"; return 1; }
     }
-
     if (!fs::exists(pyPath)) {
         std::cerr << "Python file not found: " << pyPath << "\n";
         return 1;
     }
-
     try {
         auto lines = readLines(pyPath);
         fs::path debuggedPath = buildDebuggedPath(pyPath);
         writeLines(debuggedPath, lines);
-
         bool fixedSomething = false;
-
         for (int pass = 1; pass <= maxPasses; ++pass) {
             auto err = compilePythonFile(debuggedPath);
             if (!err.has_value()) {
@@ -247,20 +230,16 @@ int main(int argc, char** argv) {
                 if (!fixedSomething) std::cout << "No fixes were necessary.\n";
                 return 0;
             }
-
             auto before = lines;
             bool changed = applyHeuristicFix(lines, *err);
-
             if (!changed || lines == before) {
                 std::cerr << "Could not safely auto-fix this error.\n";
                 std::cerr << err->raw << "\n";
                 return 2;
             }
-
             fixedSomething = true;
             writeLines(debuggedPath, lines);
         }
-
         std::cerr << "Reached max passes.\n";
         return 3;
     } catch (const std::exception& ex) {
@@ -268,8 +247,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
-"""
-
+'''
 
 def py_literal(value):
     if isinstance(value, bool):
@@ -278,14 +256,12 @@ def py_literal(value):
         return "None"
     if isinstance(value, (int, float)):
         return str(value)
-
     s = str(value)
     try:
         float(s)
         return s
     except ValueError:
         return repr(s)
-
 
 def sanitize_name(name):
     s = str(name or "").strip()
@@ -296,12 +272,10 @@ def sanitize_name(name):
         s = "_" + s
     return s
 
-
 def indent(text, level=1):
     pad = "    " * level
     lines = text.splitlines() or ["pass"]
     return "\n".join((pad + line) if line.strip() else line for line in lines)
-
 
 class SB3ToPythonConverter:
     def __init__(self, project_data, single_target=False, target_index=0):
@@ -345,9 +319,6 @@ class SB3ToPythonConverter:
             return lists_by_id[field_value[1]]
         return sanitize_name(field_value[0])
 
-    def is_block_ref(self, value, blocks):
-        return isinstance(value, str) and value in blocks
-
     def parse_input_literal(self, value):
         if isinstance(value, list):
             if len(value) >= 2:
@@ -357,46 +328,45 @@ class SB3ToPythonConverter:
         return py_literal(value)
 
     def get_input_expr(self, block, input_name, blocks, variables_by_id, lists_by_id):
-    inp = block.get("inputs", {}).get(input_name)
-    if not inp or not isinstance(inp, list) or len(inp) < 2:
-        return "None"
-
-    raw = inp[1]
-
-    # Caso 1: riferimento diretto a un blocco
-    if isinstance(raw, str) and raw in blocks:
-        target_block = blocks.get(raw)
-        if isinstance(target_block, dict):
-            return self.convert_expr(target_block, blocks, variables_by_id, lists_by_id)
-        return "None"
-
-    # Caso 2: literal tipo [4, "10"] oppure [10, "ciao"]
-    if isinstance(raw, list):
-        if len(raw) >= 2 and not isinstance(raw[0], str):
+        inp = block.get("inputs", {}).get(input_name)
+        if not inp or not isinstance(inp, list) or len(inp) < 2:
+            return "None"
+        raw = inp[1]
+        if isinstance(raw, str) and raw in blocks:
+            target_block = blocks.get(raw)
+            if isinstance(target_block, dict):
+                return self.convert_expr(target_block, blocks, variables_by_id, lists_by_id)
+            return "None"
+        if isinstance(raw, list):
+            if len(raw) >= 2 and not isinstance(raw[0], str):
+                return self.parse_input_literal(raw)
+            for item in raw:
+                if isinstance(item, str) and item in blocks:
+                    target_block = blocks.get(item)
+                    if isinstance(target_block, dict):
+                        return self.convert_expr(target_block, blocks, variables_by_id, lists_by_id)
             return self.parse_input_literal(raw)
-
-        # Caso 3: lista che contiene un block id
-        for item in raw:
-            if isinstance(item, str) and item in blocks:
-                target_block = blocks.get(item)
-                if isinstance(target_block, dict):
-                    return self.convert_expr(target_block, blocks, variables_by_id, lists_by_id)
-
         return self.parse_input_literal(raw)
-
-    return self.parse_input_literal(raw)
 
     def get_substack_id(self, block, input_name):
         inp = block.get("inputs", {}).get(input_name)
         if not inp or not isinstance(inp, list) or len(inp) < 2:
             return None
-        return inp[1] if isinstance(inp[1], str) else None
+        raw = inp[1]
+        if isinstance(raw, str):
+            return raw
+        if isinstance(raw, list):
+            for item in raw:
+                if isinstance(item, str):
+                    return item
+        return None
 
     def convert_expr(self, block, blocks, variables_by_id, lists_by_id):
+        if not isinstance(block, dict):
+            return "None"
         if not block:
             return "None"
         op = block.get("opcode", "")
-
         binary = {
             "operator_add": "+",
             "operator_subtract": "-",
@@ -413,7 +383,6 @@ class SB3ToPythonConverter:
             left_name = "NUM1" if "NUM1" in block.get("inputs", {}) else "OPERAND1"
             right_name = "NUM2" if "NUM2" in block.get("inputs", {}) else "OPERAND2"
             return f"({self.get_input_expr(block, left_name, blocks, variables_by_id, lists_by_id)} {binary[op]} {self.get_input_expr(block, right_name, blocks, variables_by_id, lists_by_id)})"
-
         if op == "operator_not":
             return f"(not {self.get_input_expr(block, 'OPERAND', blocks, variables_by_id, lists_by_id)})"
         if op == "operator_join":
@@ -426,14 +395,12 @@ class SB3ToPythonConverter:
             return f"(str({self.get_input_expr(block, 'STRING', blocks, variables_by_id, lists_by_id)})[max(0, int({self.get_input_expr(block, 'LETTER', blocks, variables_by_id, lists_by_id)}) - 1)])"
         if op == "operator_round":
             return f"(round({self.get_input_expr(block, 'NUM', blocks, variables_by_id, lists_by_id)}))"
-
         if op == "data_variable":
             return self.get_variable_name_from_field(block.get("fields", {}).get("VARIABLE"), variables_by_id)
         if op == "sensing_answer":
             return "answer"
         if op == "sensing_username":
             return "username"
-
         self.unsupported_exprs.add(op)
         return "None"
 
@@ -441,7 +408,6 @@ class SB3ToPythonConverter:
         op = block.get("opcode", "")
         if op == "event_whenflagclicked":
             return None
-
         if op == "looks_say":
             return f"print({self.get_input_expr(block, 'MESSAGE', blocks, variables_by_id, lists_by_id)})"
         if op == "looks_sayforsecs":
@@ -450,18 +416,14 @@ class SB3ToPythonConverter:
             return f"set_costume({self.get_input_expr(block, 'COSTUME', blocks, variables_by_id, lists_by_id)})"
         if op == "looks_switchbackdropto":
             return f"set_backdrop({self.get_input_expr(block, 'BACKDROP', blocks, variables_by_id, lists_by_id)})"
-
         if op == "sensing_askandwait":
             return f"answer = input(str({self.get_input_expr(block, 'QUESTION', blocks, variables_by_id, lists_by_id)}) + ' ')"
-
         if op == "data_setvariableto":
             return f"{self.get_variable_name_from_field(block.get('fields', {}).get('VARIABLE'), variables_by_id)} = {self.get_input_expr(block, 'VALUE', blocks, variables_by_id, lists_by_id)}"
         if op == "data_changevariableby":
             return f"{self.get_variable_name_from_field(block.get('fields', {}).get('VARIABLE'), variables_by_id)} += {self.get_input_expr(block, 'VALUE', blocks, variables_by_id, lists_by_id)}"
-
         if op == "data_addtolist":
             return f"{self.get_list_name_from_field(block.get('fields', {}).get('LIST'), lists_by_id)}.append({self.get_input_expr(block, 'ITEM', blocks, variables_by_id, lists_by_id)})"
-
         if op == "control_wait":
             return f"time.sleep({self.get_input_expr(block, 'DURATION', blocks, variables_by_id, lists_by_id)})"
         if op == "control_forever":
@@ -486,7 +448,6 @@ class SB3ToPythonConverter:
             b1 = self.convert_stack(s1, blocks, variables_by_id, lists_by_id) if s1 else "pass"
             b2 = self.convert_stack(s2, blocks, variables_by_id, lists_by_id) if s2 else "pass"
             return f"if {self.get_input_expr(block, 'CONDITION', blocks, variables_by_id, lists_by_id)}:\n{indent(b1)}\nelse:\n{indent(b2)}"
-
         if op == "motion_movesteps":
             return f"move_steps({self.get_input_expr(block, 'STEPS', blocks, variables_by_id, lists_by_id)})"
         if op == "motion_turnright":
@@ -495,12 +456,10 @@ class SB3ToPythonConverter:
             return f"turn_left({self.get_input_expr(block, 'DEGREES', blocks, variables_by_id, lists_by_id)})"
         if op == "motion_gotoxy":
             return f"go_to_xy({self.get_input_expr(block, 'X', blocks, variables_by_id, lists_by_id)}, {self.get_input_expr(block, 'Y', blocks, variables_by_id, lists_by_id)})"
-
         if op == "localstorage_setProjectId":
             return f"localstorage_set_project_id({self.get_input_expr(block, 'TEXT', blocks, variables_by_id, lists_by_id)})"
         if op == "localstorage_set":
             return f"localstorage_set({self.get_input_expr(block, 'KEY', blocks, variables_by_id, lists_by_id)}, {self.get_input_expr(block, 'VALUE', blocks, variables_by_id, lists_by_id)})"
-
         self.unsupported_blocks.add(op)
         return f"# TODO block: {op}"
 
@@ -523,34 +482,26 @@ class SB3ToPythonConverter:
         blocks = target.get("blocks", {})
         variables_by_id = self.collect_variables(target)
         lists_by_id = self.collect_lists(target)
-
         target_name = target.get("name", f"target_{target_index}")
         safe_target_name = sanitize_name(target_name)
         scripts = []
-
-        for block_id, block in blocks.items():
+        for _, block in blocks.items():
             if block.get("topLevel") and block.get("opcode") == "event_whenflagclicked":
                 body = self.convert_stack(block.get("next"), blocks, variables_by_id, lists_by_id) if block.get("next") else "pass"
                 scripts.append((f"{safe_target_name}_when_green_flag_{len(scripts)+1}", body))
-
         parts = [f"# ===== Target: {target_name} ====="]
-
         for var_id, var_data in target.get("variables", {}).items():
             initial = var_data[1] if isinstance(var_data, list) and len(var_data) > 1 else 0
             parts.append(f"{variables_by_id[var_id]} = {py_literal(initial)}")
-
         for list_id, list_data in target.get("lists", {}).items():
             initial = list_data[1] if isinstance(list_data, list) and len(list_data) > 1 and isinstance(list_data[1], list) else []
             parts.append(f"{lists_by_id[list_id]} = {repr(initial)}")
-
         if len(parts) > 1:
             parts.append("")
-
         for name, body in scripts:
             parts.append(f"def {name}():")
             parts.append(indent(body))
             parts.append("")
-
         return "\n".join(parts).rstrip(), [name for name, _ in scripts]
 
     def convert_project(self):
@@ -588,13 +539,11 @@ class SB3ToPythonConverter:
             "    pass",
             "",
         ]
-
         functions = []
         for i, target in enumerate(targets):
             code, names = self.convert_target(target, i)
             out.extend([code, ""])
             functions.extend(names)
-
         out.append("if __name__ == '__main__':")
         if functions:
             out.append("    threads = []")
@@ -609,7 +558,6 @@ class SB3ToPythonConverter:
             out.append("        pass")
         else:
             out.append("    pass")
-
         if self.unsupported_blocks or self.unsupported_exprs:
             out.append("")
             out.append("# Unsupported elements detected during conversion:")
@@ -617,44 +565,35 @@ class SB3ToPythonConverter:
                 out.append(f"# unsupported block: {op}")
             for op in sorted(self.unsupported_exprs):
                 out.append(f"# unsupported expr: {op}")
-
         return "\n".join(out)
-
 
 def load_project_json_from_sb3(sb3_path):
     with zipfile.ZipFile(sb3_path, "r") as zf:
         with zf.open("project.json") as f:
             return json.load(f)
 
-
 def build_output_path(input_path, output_path=None):
     return Path(output_path) if output_path else Path(input_path).with_suffix(".py")
-
 
 def build_debugged_output_path(py_path):
     py_path = Path(py_path)
     return py_path.with_name(py_path.stem + "debuggato.py")
-
 
 def write_cpp_debugger(base_dir):
     cpp_path = Path(base_dir) / "sb3_debugger.cpp"
     cpp_path.write_text(CPP_DEBUGGER_SOURCE, encoding="utf-8")
     return cpp_path
 
-
 def compile_cpp_debugger(cpp_path):
     compiler = shutil.which("g++") or shutil.which("clang++")
     if not compiler:
         raise RuntimeError("C++ compiler not found. Install g++ or clang++.")
     exe_path = cpp_path.with_suffix("")
-    cmd = [compiler, "-std=c++17", "-O2", str(cpp_path), "-o", str(exe_path)]
-    subprocess.run(cmd, check=True)
+    subprocess.run([compiler, "-std=c++17", "-O2", str(cpp_path), "-o", str(exe_path)], check=True)
     return exe_path
-
 
 def run_cpp_debugger(exe_path, py_path, max_passes=10):
     subprocess.run([str(exe_path), str(py_path), str(max_passes)], check=True)
-
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Convert .sb3 files to Python and generate a debugged Python file using C++.")
@@ -665,45 +604,33 @@ def parse_args():
     parser.add_argument("--no-cpp-debug", action="store_true", help="Skip the C++ debugger stage")
     return parser.parse_args()
 
-
 def main():
     args = parse_args()
     input_path = Path(args.input)
-
     if not input_path.exists():
         print(f"Error: file not found: {input_path}", file=sys.stderr)
         return 1
-
     try:
         project_data = load_project_json_from_sb3(input_path)
-        converter = SB3ToPythonConverter(
-            project_data,
-            single_target=args.single_target,
-            target_index=args.target_index
-        )
+        converter = SB3ToPythonConverter(project_data, single_target=args.single_target, target_index=args.target_index)
         python_code = converter.convert_project()
         py_path = build_output_path(input_path, args.output)
         py_path.write_text(python_code, encoding="utf-8")
         print(f"Generated Python: {py_path}")
-
         if not args.no_cpp_debug:
             cpp_path = write_cpp_debugger(py_path.parent)
             print(f"Generated C++ debugger: {cpp_path}")
             exe_path = compile_cpp_debugger(cpp_path)
             print(f"Compiled debugger: {exe_path}")
             run_cpp_debugger(exe_path, py_path)
-            debugged_path = build_debugged_output_path(py_path)
-            print(f"Generated debugged file: {debugged_path}")
-
+            print(f"Generated debugged file: {build_debugged_output_path(py_path)}")
         return 0
-
     except subprocess.CalledProcessError as e:
         print(f"Process error: {e}", file=sys.stderr)
         return 2
     except Exception as e:
         print(f"Conversion error: {e}", file=sys.stderr)
         return 1
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
