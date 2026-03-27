@@ -357,13 +357,34 @@ class SB3ToPythonConverter:
         return py_literal(value)
 
     def get_input_expr(self, block, input_name, blocks, variables_by_id, lists_by_id):
-        inp = block.get("inputs", {}).get(input_name)
-        if not inp or not isinstance(inp, list) or len(inp) < 2:
-            return "None"
-        raw = inp[1]
-        if self.is_block_ref(raw, blocks):
-            return self.convert_expr(blocks[raw], blocks, variables_by_id, lists_by_id)
+    inp = block.get("inputs", {}).get(input_name)
+    if not inp or not isinstance(inp, list) or len(inp) < 2:
+        return "None"
+
+    raw = inp[1]
+
+    # Caso 1: riferimento diretto a un blocco
+    if isinstance(raw, str) and raw in blocks:
+        target_block = blocks.get(raw)
+        if isinstance(target_block, dict):
+            return self.convert_expr(target_block, blocks, variables_by_id, lists_by_id)
+        return "None"
+
+    # Caso 2: literal tipo [4, "10"] oppure [10, "ciao"]
+    if isinstance(raw, list):
+        if len(raw) >= 2 and not isinstance(raw[0], str):
+            return self.parse_input_literal(raw)
+
+        # Caso 3: lista che contiene un block id
+        for item in raw:
+            if isinstance(item, str) and item in blocks:
+                target_block = blocks.get(item)
+                if isinstance(target_block, dict):
+                    return self.convert_expr(target_block, blocks, variables_by_id, lists_by_id)
+
         return self.parse_input_literal(raw)
+
+    return self.parse_input_literal(raw)
 
     def get_substack_id(self, block, input_name):
         inp = block.get("inputs", {}).get(input_name)
